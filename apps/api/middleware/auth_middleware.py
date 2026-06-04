@@ -4,7 +4,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from utils.tokens import decode_access_token
 
-UNPROTECTED_PATHS = {"/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/docs", "/openapi.json"}
+UNPROTECTED_PATHS = {
+    "/api/auth/register",
+    "/api/auth/login",
+    "/api/auth/refresh",
+    "/api/auth/google/login",
+    "/api/auth/google/callback",
+    "/docs",
+    "/openapi.json",
+}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

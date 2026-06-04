@@ -4,6 +4,7 @@ import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import ProjectDetail from '@/pages/ProjectDetail'
 import JoinProject from '@/pages/JoinProject'
+import AuthCallback from '@/pages/AuthCallback'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { accessToken, user } = useAuthStore()
@@ -32,6 +33,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

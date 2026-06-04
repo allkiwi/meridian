@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models.user import User
+from models.user_integration import UserIntegration
 from schemas.auth import RegisterRequest, TokenResponse, UserOut
 from utils.passcode import hash_password, verify_password
 from utils.tokens import create_access_token, create_refresh_token, decode_access_token, decode_refresh_token
@@ -34,11 +36,63 @@ async def create_user(data: RegisterRequest, db: AsyncSession) -> User:
 async def authenticate(email: str, password: str, db: AsyncSession) -> User:
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    return user
+
+
+async def get_or_create_google_user(
+    google_id: str,
+    email: str,
+    name: str,
+    google_access_token: str,
+    google_refresh_token: str | None,
+    token_expiry: datetime | None,
+    scope: str,
+    db: AsyncSession,
+) -> User:
+    from datetime import timezone
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(id=uuid.uuid4(), name=name, email=email, password_hash=None)
+        db.add(user)
+        await db.flush()
+
+    result = await db.execute(
+        select(UserIntegration).where(
+            UserIntegration.user_id == user.id,
+            UserIntegration.provider == "google",
+        )
+    )
+    integration = result.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if integration:
+        integration.access_token = google_access_token
+        if google_refresh_token:
+            integration.refresh_token = google_refresh_token
+        integration.token_expiry = token_expiry
+        integration.scope = scope
+        integration.updated_at = now
+    else:
+        integration = UserIntegration(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            provider="google",
+            access_token=google_access_token,
+            refresh_token=google_refresh_token,
+            token_expiry=token_expiry,
+            scope=scope,
+            email=email,
+        )
+        db.add(integration)
+
     return user
 
 
