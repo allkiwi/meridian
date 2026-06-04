@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
+    # Google OAuth (used for email integration during onboarding)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
     # App
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     debug: bool = False

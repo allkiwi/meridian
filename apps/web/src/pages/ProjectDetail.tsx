@@ -223,6 +223,7 @@ export default function ProjectDetail() {
                   description: milestoneModal.editing.description ?? undefined,
                   owner_id: milestoneModal.editing.owner_id ?? undefined,
                   target_date: milestoneModal.editing.target_date ?? undefined,
+                  status: milestoneModal.editing.status,
                 }
               : { parent_milestone_id: milestoneModal.parentId }
           }

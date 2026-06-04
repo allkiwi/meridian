@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/Input'
 
 interface MilestoneFormProps {
   members: ProjectMember[]
-  initialValues?: Partial<MilestoneCreate>
+  initialValues?: Partial<MilestoneCreate> & { status?: string }
   mode?: 'create' | 'edit'
   onSubmit: (data: MilestoneCreate | MilestoneUpdate) => Promise<void>
   onCancel: () => void
@@ -23,7 +23,7 @@ export function MilestoneForm({
   const [description, setDescription] = useState(initialValues.description ?? '')
   const [ownerId, setOwnerId] = useState(initialValues.owner_id ?? '')
   const [targetDate, setTargetDate] = useState(initialValues.target_date ?? '')
-  const [status, setStatus] = useState('pending')
+  const [status, setStatus] = useState(initialValues?.status ?? 'pending')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

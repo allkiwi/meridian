@@ -231,12 +231,13 @@ async def update_milestone(
 
     await _require_member(milestone.project_id, user.id, db)
 
-    updates = data.model_dump(exclude_unset=True)
-    for field, value in updates.items():
+    updates_native = data.model_dump(exclude_unset=True)
+    updates_json = data.model_dump(exclude_unset=True, mode='json')
+    for field, value in updates_native.items():
         setattr(milestone, field, value)
     await db.flush()
 
-    await log_action(db, user.id, "milestone.updated", "milestone", milestone_id, updates)
+    await log_action(db, user.id, "milestone.updated", "milestone", milestone_id, updates_json)
     return await get_milestone(milestone_id, user.id, db)
 
 
