@@ -22,8 +22,10 @@ interface Props {
   onAddChild: (parentId: string) => void
   onEdit: (milestone: Milestone) => void
   onDelete: (milestoneId: string) => void
+  onShare: (milestoneId: string) => void
   canEdit: boolean
   canDelete: boolean
+  canShare: boolean
 }
 
 export function MilestoneRow({
@@ -34,8 +36,10 @@ export function MilestoneRow({
   onAddChild,
   onEdit,
   onDelete,
+  onShare,
   canEdit,
   canDelete,
+  canShare,
 }: Props) {
   const [hovered, setHovered] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -145,6 +149,15 @@ export function MilestoneRow({
                   </button>
                 </>
               )}
+              {canShare && (
+                <button
+                  onClick={() => onShare(milestone.id)}
+                  className="rounded px-2 py-1 text-xs text-white/40 hover:bg-white/10 hover:text-white/80 transition-colors"
+                  title="Share milestone"
+                >
+                  Share
+                </button>
+              )}
               {canDelete && (
                 <button
                   onClick={handleDelete}
@@ -173,8 +186,10 @@ export function MilestoneRow({
           onAddChild={onAddChild}
           onEdit={onEdit}
           onDelete={onDelete}
+          onShare={onShare}
           canEdit={canEdit}
           canDelete={canDelete}
+          canShare={canShare}
         />
       ))}
     </div>

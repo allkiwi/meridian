@@ -5,6 +5,7 @@ import { PageShell } from '@/components/layout/PageShell'
 import { Topbar } from '@/components/layout/Topbar'
 import { MilestoneRow } from '@/components/project/MilestoneRow'
 import { MilestoneForm } from '@/components/project/MilestoneForm'
+import { ShareModal } from '@/components/project/ShareModal'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useProject } from '@/hooks/useProject'
@@ -26,6 +27,11 @@ export default function ProjectDetail() {
     parentId?: string
     editing?: Milestone
   }>({ open: false })
+  const [shareModal, setShareModal] = useState<{
+    entityType: 'project' | 'milestone'
+    entityId: string
+    entityName: string
+  } | null>(null)
 
   const { data: project, isLoading: projectLoading } = useProject(projectId)
   const { data: milestones, isLoading: milestonesLoading } = useMilestones(projectId)
@@ -71,6 +77,13 @@ export default function ProjectDetail() {
     await deleteMilestone(milestoneId)
   }
 
+  function openMilestoneShare(milestoneId: string) {
+    const flatten = (items: Milestone[]): Milestone[] =>
+      items.flatMap((m) => [m, ...flatten(m.children ?? [])])
+    const found = flatten(milestones ?? []).find((m) => m.id === milestoneId)
+    setShareModal({ entityType: 'milestone', entityId: milestoneId, entityName: found?.title ?? 'Milestone' })
+  }
+
   if (projectLoading) {
     return (
       <PageShell>
@@ -97,6 +110,7 @@ export default function ProjectDetail() {
         members={members}
         view={view}
         onViewChange={setView}
+        onShareProject={() => setShareModal({ entityType: 'project', entityId: projectId, entityName: project.name })}
       />
 
       <div className="px-8 py-6">
@@ -135,8 +149,10 @@ export default function ProjectDetail() {
                     onAddChild={openNewMilestone}
                     onEdit={openEdit}
                     onDelete={handleDelete}
+                    onShare={openMilestoneShare}
                     canEdit={canUpdateMilestone}
                     canDelete={canDeleteMilestone}
+                    canShare={true}
                   />
                 ))}
               </div>
@@ -231,6 +247,15 @@ export default function ProjectDetail() {
           onCancel={() => setMilestoneModal({ open: false })}
         />
       </Modal>
+      {shareModal && (
+        <ShareModal
+          open={true}
+          onClose={() => setShareModal(null)}
+          entityType={shareModal.entityType}
+          entityId={shareModal.entityId}
+          entityName={shareModal.entityName}
+        />
+      )}
     </PageShell>
   )
 }

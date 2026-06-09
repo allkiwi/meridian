@@ -13,7 +13,7 @@ from services.auth_service import (
     get_or_create_google_user,
     refresh_access_token,
 )
-from services.oauth_service import build_google_auth_url, exchange_google_code
+from services.oauth_service import build_google_auth_url, build_google_reauth_url, exchange_google_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -43,6 +43,12 @@ async def me(current_user: UserOut = Depends(get_current_user)):
 @router.get("/google/login")
 async def google_login():
     url, _state = await build_google_auth_url()
+    return RedirectResponse(url=url)
+
+
+@router.get("/google/reauth")
+async def google_reauth():
+    url, _state = await build_google_reauth_url()
     return RedirectResponse(url=url)
 
 

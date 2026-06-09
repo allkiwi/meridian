@@ -7,7 +7,7 @@ from authlib.integrations.httpx_client import AsyncOAuth2Client
 from config import settings
 
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
-GOOGLE_SCOPES = "openid email profile"
+GOOGLE_SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.send"
 
 # In-memory PKCE store: state -> (code_verifier, expiry)
 # Replace values with Redis calls (settings.redis_url) for multi-worker deployments.
@@ -16,7 +16,7 @@ _PKCE_TTL_SECONDS = 300
 
 
 def _callback_uri() -> str:
-    return f"{settings.api_base_url}/api/auth/google/callback"
+    return settings.google_redirect_uri
 
 
 def _purge_stale_pkce() -> None:
@@ -33,7 +33,7 @@ async def _fetch_discovery() -> dict:
         return resp.json()
 
 
-async def build_google_auth_url() -> tuple[str, str]:
+async def _build_auth_url(prompt: str) -> tuple[str, str]:
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
 
@@ -53,10 +53,19 @@ async def build_google_auth_url() -> tuple[str, str]:
         disc["authorization_endpoint"],
         state=state,
         code_verifier=code_verifier,
-        access_type="offline",  # request refresh token
-        prompt="select_account",
+        access_type="offline",
+        prompt=prompt,
     )
     return url, state
+
+
+async def build_google_auth_url() -> tuple[str, str]:
+    return await _build_auth_url("select_account")
+
+
+async def build_google_reauth_url() -> tuple[str, str]:
+    """Force consent screen so Google issues a new token with updated scopes."""
+    return await _build_auth_url("consent")
 
 
 async def exchange_google_code(code: str, state: str) -> tuple[dict, dict]:

@@ -1,0 +1,14 @@
+{
+  "name": "Meridian",
+  "forwardPorts": [5173, 8000, 5432, 6379],
+  "portsAttributes": {
+    "5173": {
+      "label": "Web (Vite)",
+      "onAutoForward": "openBrowserOnce"
+    },
+    "8000": {
+      "label": "API (FastAPI)",
+      "onAutoForward": "notify"
+    }
+  }
+}

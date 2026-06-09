@@ -24,12 +24,12 @@ class Settings(BaseSettings):
     # Google OAuth (used for email integration during onboarding)
     google_client_id: str = ""
     google_client_secret: str = ""
+    google_redirect_uri: str = ""
 
     # App
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     debug: bool = False
     frontend_url: str = "http://localhost:5173"
-    api_base_url: str = "http://localhost:8000"
 
 
 settings = Settings()

@@ -16,7 +16,8 @@ from schemas.project import (
     ProjectUpdate,
     UpdateMemberRoleRequest,
 )
-from services import auth_service, project_service
+from schemas.share import ShareRequest, ShareResponse
+from services import auth_service, email_service, project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -91,6 +92,17 @@ async def get_members(
     db: AsyncSession = Depends(get_db),
 ):
     return await project_service.get_members(project_id, current_user.id, db)
+
+
+@router.post("/{project_id}/share", response_model=ShareResponse)
+async def share_project(
+    project_id: uuid.UUID,
+    data: ShareRequest,
+    current_user: UserOut = Depends(auth_service.get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await email_service.share_project(project_id, current_user.id, data.recipient_email, data.message, db)
+    return ShareResponse()
 
 
 @router.patch("/{project_id}/members/{user_id}", response_model=ProjectMemberOut)

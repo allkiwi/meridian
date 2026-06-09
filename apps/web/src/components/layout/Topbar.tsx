@@ -16,9 +16,10 @@ interface TopbarProps {
   members: ProjectMember[]
   view: string
   onViewChange: (v: string) => void
+  onShareProject?: () => void
 }
 
-export function Topbar({ projectName, projectStatus, members, view, onViewChange }: TopbarProps) {
+export function Topbar({ projectName, projectStatus, members, view, onViewChange, onShareProject }: TopbarProps) {
   const visible = members.slice(0, 4)
   const overflow = members.length - 4
 
@@ -35,16 +36,26 @@ export function Topbar({ projectName, projectStatus, members, view, onViewChange
           </div>
         </div>
 
-        {/* Avatar stack */}
-        <div className="flex items-center">
-          <div className="flex -space-x-2">
-            {visible.map((m) => (
-              <Avatar key={m.user_id} name={m.name} size="sm" className="ring-2 ring-[#0a0f1e]" />
-            ))}
-          </div>
-          {overflow > 0 && (
-            <span className="ml-2 text-xs text-white/40">+{overflow}</span>
+        {/* Avatar stack + Share */}
+        <div className="flex items-center gap-3">
+          {onShareProject && (
+            <button
+              onClick={onShareProject}
+              className="rounded-lg border border-white/20 bg-transparent px-3 py-1.5 text-sm text-white hover:bg-white/10 transition-colors"
+            >
+              Share
+            </button>
           )}
+          <div className="flex items-center">
+            <div className="flex -space-x-2">
+              {visible.map((m) => (
+                <Avatar key={m.user_id} name={m.name} size="sm" className="ring-2 ring-[#0a0f1e]" />
+              ))}
+            </div>
+            {overflow > 0 && (
+              <span className="ml-2 text-xs text-white/40">+{overflow}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
