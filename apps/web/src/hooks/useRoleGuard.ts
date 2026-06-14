@@ -18,10 +18,11 @@ export function useRoleGuard(projectId: string) {
     role,
     isProjectManager: role === 'project_manager',
     isMember: role === 'member',
-    isExecutive: role === 'executive',
+    isViewer: role === 'viewer',
     canCreateMilestone: role === 'project_manager' || role === 'member',
     canDeleteMilestone: role === 'project_manager',
     canUpdateMilestone: role === 'project_manager' || role === 'member',
+    canShare: role === 'project_manager' || role === 'member',
     canManageMembers: role === 'project_manager',
   }
 }

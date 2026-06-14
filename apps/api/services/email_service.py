@@ -6,11 +6,14 @@ from email.message import EmailMessage
 import httpx
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from models.milestone import Milestone
+from models.milestone_share import MilestoneShare
 from models.project import Project, ProjectMember
+from models.project_invite import ProjectInvite
 from models.user import User
 from models.user_integration import UserIntegration
 
@@ -134,6 +137,7 @@ async def share_project(
     project_id: uuid.UUID,
     sender_id: uuid.UUID,
     recipient_email: str,
+    access_type: str,
     message: str | None,
     db: AsyncSession,
 ) -> None:
@@ -150,8 +154,11 @@ async def share_project(
             ProjectMember.user_id == sender_id,
         )
     )
-    if not member_result.scalar_one_or_none():
+    member = member_result.scalar_one_or_none()
+    if not member:
         raise HTTPException(status_code=403, detail="Not a member of this project")
+    if member.role == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot share projects")
 
     sender_result = await db.execute(select(User).where(User.id == sender_id))
     sender = sender_result.scalar_one()
@@ -176,6 +183,8 @@ async def share_project(
         )
         message_plain = f'\n\n"{message}"'
 
+    join_url = f"{settings.frontend_url}/join/{project_id}"
+
     body_html = f"""
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:6px;padding:0;margin-bottom:16px;">
         <tr><td style="padding:20px;">
@@ -185,15 +194,18 @@ async def share_project(
         </td></tr>
       </table>
       {message_html}
-      <p style="margin:20px 0 0;color:#6b7280;font-size:13px;">
-        To join this project, contact {sender.name} to get the passcode.
+      <p style="margin:24px 0 0;">
+        <a href="{join_url}"
+           style="display:inline-block;padding:10px 20px;background:#f59e0b;color:#000;font-size:14px;font-weight:600;border-radius:6px;text-decoration:none;">
+          Join project
+        </a>
       </p>
     """
 
     plain_body = (
         f"{sender.name} shared a project with you: {project.name}\n"
         f"Status: {project.status}{desc_plain}{message_plain}\n\n"
-        f"To join this project, contact {sender.name} to get the passcode."
+        f"Join this project: {join_url}"
     )
 
     await _send_via_gmail(
@@ -206,11 +218,41 @@ async def share_project(
         plain_body=plain_body,
     )
 
+    invite_role = "viewer" if access_type == "view" else "member"
+    stmt = pg_insert(ProjectInvite).values(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        invited_email=recipient_email,
+        invited_by_id=sender_id,
+        role=invite_role,
+        status="pending",
+    ).on_conflict_do_update(
+        constraint="uq_project_invites_project_email",
+        set_={"status": "pending", "role": invite_role, "invited_by_id": sender_id},
+    )
+    await db.execute(stmt)
+    await db.flush()
+
+
+def _access_badge(access_type: str) -> str:
+    if access_type == 'edit':
+        color = "#d97706"
+        label = "Edit access"
+    else:
+        color = "#6b7280"
+        label = "View only"
+    return (
+        f'<span style="display:inline-block;padding:2px 10px;border-radius:9999px;'
+        f'background:{color}22;color:{color};font-size:12px;font-weight:600;">'
+        f"{label}</span>"
+    )
+
 
 async def share_milestone(
     milestone_id: uuid.UUID,
     sender_id: uuid.UUID,
     recipient_email: str,
+    access_type: str,
     message: str | None,
     db: AsyncSession,
 ) -> None:
@@ -230,14 +272,85 @@ async def share_milestone(
             ProjectMember.user_id == sender_id,
         )
     )
-    if not member_result.scalar_one_or_none():
+    member = member_result.scalar_one_or_none()
+    if not member:
         raise HTTPException(status_code=403, detail="Not a member of this project")
+    if member.role == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot share milestones")
 
     sender_result = await db.execute(select(User).where(User.id == sender_id))
     sender = sender_result.scalar_one()
 
+    # Resolve recipient user id if they already have an account
+    recipient_result = await db.execute(select(User).where(User.email == recipient_email))
+    recipient_user = recipient_result.scalar_one_or_none()
+
+    # Upsert share record
+    stmt = pg_insert(MilestoneShare).values(
+        id=uuid.uuid4(),
+        milestone_id=milestone_id,
+        shared_with_email=recipient_email,
+        shared_with_id=recipient_user.id if recipient_user else None,
+        access_type=access_type,
+        granted_by_id=sender_id,
+    ).on_conflict_do_update(
+        constraint="uq_milestone_shares_milestone_email",
+        set_={
+            "access_type": access_type,
+            "granted_by_id": sender_id,
+            "shared_with_id": recipient_user.id if recipient_user else None,
+            "created_at": datetime.now(timezone.utc),
+        },
+    )
+    await db.execute(stmt)
+    await db.flush()
+
+    # Auto-grant viewer access to the parent project if not already a member
+    if recipient_user:
+        existing_member = await db.execute(
+            select(ProjectMember).where(
+                ProjectMember.project_id == milestone.project_id,
+                ProjectMember.user_id == recipient_user.id,
+            )
+        )
+        if not existing_member.scalar_one_or_none():
+            db.add(ProjectMember(
+                id=uuid.uuid4(),
+                project_id=milestone.project_id,
+                user_id=recipient_user.id,
+                role="viewer",
+            ))
+            invite_stmt = pg_insert(ProjectInvite).values(
+                id=uuid.uuid4(),
+                project_id=milestone.project_id,
+                invited_email=recipient_email,
+                invited_by_id=sender_id,
+                role="viewer",
+                status="accepted",
+            ).on_conflict_do_update(
+                constraint="uq_project_invites_project_email",
+                set_={"status": "accepted", "role": "viewer"},
+            )
+            await db.execute(invite_stmt)
+            await db.flush()
+    else:
+        invite_stmt = pg_insert(ProjectInvite).values(
+            id=uuid.uuid4(),
+            project_id=milestone.project_id,
+            invited_email=recipient_email,
+            invited_by_id=sender_id,
+            role="viewer",
+            status="pending",
+        ).on_conflict_do_update(
+            constraint="uq_project_invites_project_email",
+            set_={"status": "pending", "role": "viewer"},
+        )
+        await db.execute(invite_stmt)
+        await db.flush()
+
     integration = await _get_valid_integration(sender_id, db)
 
+    access_label = "edit" if access_type == "edit" else "view"
     subject = f"{sender.name} shared a milestone with you — {milestone.title}"
 
     desc_html = ""
@@ -263,23 +376,35 @@ async def share_milestone(
         )
         message_plain = f'\n\n"{message}"'
 
+    milestone_url = f"{settings.frontend_url}/projects/{milestone.project_id}"
+
     body_html = f"""
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:6px;padding:0;margin-bottom:16px;">
         <tr><td style="padding:20px;">
           <p style="margin:0 0 4px;color:#6b7280;font-size:12px;">Project: {project_name}</p>
           <p style="margin:0 0 8px;font-size:16px;font-weight:600;color:#111827;">{milestone.title}</p>
           {_status_badge(milestone.status)}
+          &nbsp;
+          {_access_badge(access_type)}
           {desc_html}
           {date_html}
         </td></tr>
       </table>
       {message_html}
+      <p style="margin:24px 0 0;">
+        <a href="{milestone_url}"
+           style="display:inline-block;padding:10px 20px;background:#f59e0b;color:#000;font-size:14px;font-weight:600;border-radius:6px;text-decoration:none;">
+          View milestone
+        </a>
+      </p>
     """
 
     plain_body = (
         f"{sender.name} shared a milestone with you: {milestone.title}\n"
         f"Project: {project_name}\n"
-        f"Status: {milestone.status}{desc_plain}{date_plain}{message_plain}"
+        f"Access: {access_label}\n"
+        f"Status: {milestone.status}{desc_plain}{date_plain}{message_plain}\n\n"
+        f"View milestone: {milestone_url}"
     )
 
     await _send_via_gmail(

@@ -1,4 +1,4 @@
-export type ProjectRole = 'project_manager' | 'member' | 'executive'
+export type ProjectRole = 'project_manager' | 'member' | 'viewer'
 export type ProjectStatus = 'active' | 'archived' | 'completed'
 
 export interface Project {
@@ -10,7 +10,6 @@ export interface Project {
   created_at: string
   member_count: number
   milestone_count: number
-  passcode?: string
 }
 
 export interface ProjectSummary {

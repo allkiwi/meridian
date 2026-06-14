@@ -27,7 +27,9 @@ export default function AuthCallback() {
     getMe()
       .then((user) => {
         setAuth(user, accessToken, refreshToken)
-        navigate('/', { replace: true })
+        const returnUrl = sessionStorage.getItem('authReturn') || '/'
+        sessionStorage.removeItem('authReturn')
+        navigate(returnUrl, { replace: true })
       })
       .catch(() => {
         clearAuth()

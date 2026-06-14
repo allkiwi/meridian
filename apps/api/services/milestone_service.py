@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.milestone import Milestone
+from models.milestone_share import MilestoneShare
 from models.project import ProjectMember
 from schemas.auth import UserOut
 from schemas.milestone import GanttItem, MilestoneCreate, MilestoneOut, MilestoneUpdate
@@ -22,6 +23,7 @@ def _days_until(target_date) -> int | None:
 def _build_tree(
     by_parent: dict[str | None, list[Milestone]],
     parent_id: str | None,
+    editable_ids: set[str] | None = None,
 ) -> list[MilestoneOut]:
     children = sorted(
         by_parent.get(parent_id, []),
@@ -41,8 +43,9 @@ def _build_tree(
             parent_milestone_id=m.parent_milestone_id,
             sort_order=m.sort_order,
             created_at=m.created_at,
-            children=_build_tree(by_parent, str(m.id)),
+            children=_build_tree(by_parent, str(m.id), editable_ids),
             days_until_due=_days_until(m.target_date),
+            user_access='edit' if (editable_ids is None or str(m.id) in editable_ids) else 'view',
         )
         result.append(out)
     return result
@@ -104,6 +107,20 @@ async def _require_member(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSe
         raise HTTPException(status_code=403, detail="Not a member of this project")
 
 
+async def _require_edit_member(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
+    result = await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+    )
+    member = result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member of this project")
+    if member.role == "viewer":
+        raise HTTPException(status_code=403, detail="Edit access required")
+
+
 async def _require_pm(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
     result = await db.execute(
         select(ProjectMember).where(
@@ -116,10 +133,45 @@ async def _require_pm(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSessio
         raise HTTPException(status_code=403, detail="Project manager role required")
 
 
+async def _check_access(milestone_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> str | None:
+    """Return 'edit', 'view', or None based on project membership or milestone share."""
+    milestone_result = await db.execute(
+        select(Milestone.project_id).where(
+            Milestone.id == milestone_id, Milestone.deleted_at.is_(None)
+        )
+    )
+    project_id = milestone_result.scalar_one_or_none()
+    if project_id is None:
+        return None
+
+    member_result = await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+    )
+    member = member_result.scalar_one_or_none()
+    if member and member.role != 'viewer':
+        return 'edit'
+
+    # Check milestone-level share (applies to viewers and non-members)
+    share_result = await db.execute(
+        select(MilestoneShare).where(
+            MilestoneShare.milestone_id == milestone_id,
+            MilestoneShare.shared_with_id == user_id,
+        )
+    )
+    share = share_result.scalar_one_or_none()
+    if share:
+        return share.access_type
+
+    return 'view' if member else None
+
+
 async def create_milestone(
     project_id: uuid.UUID, data: MilestoneCreate, creator: UserOut, db: AsyncSession
 ) -> MilestoneOut:
-    await _require_member(project_id, creator.id, db)
+    await _require_edit_member(project_id, creator.id, db)
 
     if data.parent_milestone_id:
         parent_result = await db.execute(
@@ -172,6 +224,7 @@ async def create_milestone(
         created_at=milestone.created_at,
         children=[],
         days_until_due=_days_until(milestone.target_date),
+        user_access='edit',
     )
 
 
@@ -179,7 +232,39 @@ async def get_milestones(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSes
     await _require_member(project_id, user_id, db)
     milestones = await _load_project_milestones(project_id, db)
     by_parent = _group_by_parent(milestones)
-    return _build_tree(by_parent, None)
+
+    member_result = await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+    )
+    member = member_result.scalar_one_or_none()
+
+    if member and member.role != 'viewer':
+        editable_ids = None  # sentinel: all milestones are editable
+    else:
+        share_result = await db.execute(
+            select(MilestoneShare.milestone_id).where(
+                MilestoneShare.shared_with_id == user_id,
+                MilestoneShare.access_type == 'edit',
+            )
+        )
+        editable_ids = {str(row[0]) for row in share_result.fetchall()}
+
+    return _build_tree(by_parent, None, editable_ids)
+
+
+async def _require_milestone_access(milestone_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
+    access = await _check_access(milestone_id, user_id, db)
+    if access is None:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
+async def _require_milestone_edit(milestone_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
+    access = await _check_access(milestone_id, user_id, db)
+    if access != 'edit':
+        raise HTTPException(status_code=403, detail="Edit access required")
 
 
 async def get_milestone(milestone_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> MilestoneOut:
@@ -192,7 +277,7 @@ async def get_milestone(milestone_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSe
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
 
-    await _require_member(milestone.project_id, user_id, db)
+    await _require_milestone_access(milestone_id, user_id, db)
 
     milestones = await _load_project_milestones(milestone.project_id, db)
     by_parent = _group_by_parent(milestones)
@@ -229,7 +314,7 @@ async def update_milestone(
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
 
-    await _require_member(milestone.project_id, user.id, db)
+    await _require_milestone_edit(milestone_id, user.id, db)
 
     updates_native = data.model_dump(exclude_unset=True)
     updates_json = data.model_dump(exclude_unset=True, mode='json')
@@ -249,6 +334,7 @@ async def delete_milestone(milestone_id: uuid.UUID, user: UserOut, db: AsyncSess
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
 
+    # Delete requires project manager membership — share-level access is not enough
     await _require_pm(milestone.project_id, user.id, db)
 
     # Load all project milestones to find descendants

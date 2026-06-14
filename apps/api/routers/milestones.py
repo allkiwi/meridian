@@ -7,7 +7,7 @@ from database import get_db
 from middleware.role_guard import require_project_role
 from schemas.auth import UserOut
 from schemas.milestone import GanttItem, MilestoneCreate, MilestoneOut, MilestoneUpdate
-from schemas.share import ShareRequest, ShareResponse
+from schemas.share import MilestoneShareRequest, ShareResponse
 from services import auth_service, email_service, milestone_service
 
 router = APIRouter(tags=["milestones"])
@@ -72,9 +72,11 @@ async def delete_milestone(
 @router.post("/milestones/{milestone_id}/share", response_model=ShareResponse)
 async def share_milestone(
     milestone_id: uuid.UUID,
-    data: ShareRequest,
+    data: MilestoneShareRequest,
     current_user: UserOut = Depends(auth_service.get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await email_service.share_milestone(milestone_id, current_user.id, data.recipient_email, data.message, db)
+    await email_service.share_milestone(
+        milestone_id, current_user.id, data.recipient_email, data.access_type, data.message, db
+    )
     return ShareResponse()

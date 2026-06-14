@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.milestone import Milestone
 from models.project import Project, ProjectMember
+from models.project_invite import ProjectInvite
 from models.user import User
 from schemas.auth import UserOut
 from schemas.project import (
-    JoinProjectRequest,
     ProjectCreate,
     ProjectMemberOut,
     ProjectOut,
@@ -19,19 +19,15 @@ from schemas.project import (
     ProjectUpdate,
 )
 from utils.audit_log import log_action
-from utils.passcode import generate_project_passcode, hash_password, verify_password
 
 
 async def create_project(owner: UserOut, data: ProjectCreate, db: AsyncSession) -> ProjectOut:
-    passcode = generate_project_passcode()
-
     project = Project(
         id=uuid.uuid4(),
         org_id=None,
         name=data.name,
         description=data.description,
         owner_id=owner.id,
-        passcode_hash=hash_password(passcode),
         status="active",
     )
     db.add(project)
@@ -57,7 +53,6 @@ async def create_project(owner: UserOut, data: ProjectCreate, db: AsyncSession) 
         created_at=project.created_at,
         member_count=1,
         milestone_count=0,
-        passcode=passcode,
     )
 
 
@@ -105,7 +100,7 @@ async def get_user_projects(user_id: uuid.UUID, db: AsyncSession) -> list[Projec
     ]
 
 
-async def _project_out(project: Project, db: AsyncSession, passcode: str | None = None) -> ProjectOut:
+async def _project_out(project: Project, db: AsyncSession) -> ProjectOut:
     member_count = (
         await db.execute(
             select(func.count(ProjectMember.id)).where(ProjectMember.project_id == project.id)
@@ -130,7 +125,6 @@ async def _project_out(project: Project, db: AsyncSession, passcode: str | None 
         created_at=project.created_at,
         member_count=member_count,
         milestone_count=milestone_count,
-        passcode=passcode,
     )
 
 
@@ -204,7 +198,7 @@ async def delete_project(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSes
 
 
 async def join_project(
-    user: UserOut, project_id: uuid.UUID, data: JoinProjectRequest, db: AsyncSession
+    user: UserOut, project_id: uuid.UUID, db: AsyncSession
 ) -> ProjectOut:
     result = await db.execute(
         select(Project).where(Project.id == project_id, Project.deleted_at.is_(None))
@@ -212,9 +206,6 @@ async def join_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    if not verify_password(data.passcode, project.passcode_hash):
-        raise HTTPException(status_code=403, detail="Invalid passcode")
 
     existing = await db.execute(
         select(ProjectMember).where(
@@ -225,11 +216,20 @@ async def join_project(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Already a member of this project")
 
+    invite_result = await db.execute(
+        select(ProjectInvite).where(
+            ProjectInvite.project_id == project_id,
+            ProjectInvite.invited_email == user.email,
+        )
+    )
+    invite = invite_result.scalar_one_or_none()
+    role = invite.role if invite else "member"
+
     member = ProjectMember(
         id=uuid.uuid4(),
         project_id=project_id,
         user_id=user.id,
-        role="member",
+        role=role,
     )
     db.add(member)
     await db.flush()

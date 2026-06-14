@@ -17,6 +17,50 @@ from utils.tokens import create_access_token, create_refresh_token, decode_acces
 bearer_scheme = HTTPBearer()
 
 
+async def _resolve_pending_invites(user: User, db: AsyncSession) -> None:
+    from models.milestone_share import MilestoneShare
+    from models.project import ProjectMember
+    from models.project_invite import ProjectInvite
+
+    result = await db.execute(
+        select(ProjectInvite).where(
+            ProjectInvite.invited_email == user.email,
+            ProjectInvite.status == "pending",
+        )
+    )
+    invites = result.scalars().all()
+    for invite in invites:
+        existing = await db.execute(
+            select(ProjectMember).where(
+                ProjectMember.project_id == invite.project_id,
+                ProjectMember.user_id == user.id,
+            )
+        )
+        if not existing.scalar_one_or_none():
+            db.add(ProjectMember(
+                id=uuid.uuid4(),
+                project_id=invite.project_id,
+                user_id=user.id,
+                role=invite.role,
+            ))
+        invite.status = "accepted"
+    if invites:
+        await db.flush()
+
+    # Backfill shared_with_id on any milestone shares matched by email
+    share_result = await db.execute(
+        select(MilestoneShare).where(
+            MilestoneShare.shared_with_email == user.email,
+            MilestoneShare.shared_with_id.is_(None),
+        )
+    )
+    pending_shares = share_result.scalars().all()
+    for share in pending_shares:
+        share.shared_with_id = user.id
+    if pending_shares:
+        await db.flush()
+
+
 async def create_user(data: RegisterRequest, db: AsyncSession) -> User:
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
@@ -30,6 +74,7 @@ async def create_user(data: RegisterRequest, db: AsyncSession) -> User:
     )
     db.add(user)
     await db.flush()
+    await _resolve_pending_invites(user, db)
     return user
 
 
@@ -41,6 +86,7 @@ async def authenticate(email: str, password: str, db: AsyncSession) -> User:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    await _resolve_pending_invites(user, db)
     return user
 
 
@@ -93,6 +139,7 @@ async def get_or_create_google_user(
         )
         db.add(integration)
 
+    await _resolve_pending_invites(user, db)
     return user
 
 

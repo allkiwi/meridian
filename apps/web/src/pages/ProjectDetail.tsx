@@ -45,7 +45,7 @@ export default function ProjectDetail() {
     queryFn: () => projectsApi.getMembers(projectId),
     enabled: !!projectId,
   })
-  const { canCreateMilestone, canDeleteMilestone, canUpdateMilestone } = useRoleGuard(projectId)
+  const { canCreateMilestone, canDeleteMilestone, canUpdateMilestone, canShare } = useRoleGuard(projectId)
   const { mutateAsync: createMilestone } = useCreateMilestone(projectId)
   const { mutateAsync: updateMilestone } = useUpdateMilestone(projectId)
   const { mutateAsync: deleteMilestone } = useDeleteMilestone(projectId)
@@ -110,7 +110,7 @@ export default function ProjectDetail() {
         members={members}
         view={view}
         onViewChange={setView}
-        onShareProject={() => setShareModal({ entityType: 'project', entityId: projectId, entityName: project.name })}
+        onShareProject={canShare ? () => setShareModal({ entityType: 'project', entityId: projectId, entityName: project.name }) : undefined}
       />
 
       <div className="px-8 py-6">
@@ -152,7 +152,7 @@ export default function ProjectDetail() {
                     onShare={openMilestoneShare}
                     canEdit={canUpdateMilestone}
                     canDelete={canDeleteMilestone}
-                    canShare={true}
+                    canShare={canShare}
                   />
                 ))}
               </div>

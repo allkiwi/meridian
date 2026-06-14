@@ -30,8 +30,8 @@ export async function remove(id: string): Promise<void> {
   await apiClient.delete(`/projects/${id}`)
 }
 
-export async function join(id: string, passcode: string): Promise<Project> {
-  const res = await apiClient.post<Project>(`/projects/${id}/join`, { passcode })
+export async function join(id: string): Promise<Project> {
+  const res = await apiClient.post<Project>(`/projects/${id}/join`)
   return res.data
 }
 

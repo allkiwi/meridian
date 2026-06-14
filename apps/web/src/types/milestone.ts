@@ -12,6 +12,7 @@ export interface Milestone {
   created_at: string
   children: Milestone[]
   days_until_due: number | null
+  user_access: 'edit' | 'view'
 }
 
 export interface MilestoneCreate {

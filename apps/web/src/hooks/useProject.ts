@@ -28,8 +28,7 @@ export function useCreateProject() {
 export function useJoinProject() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, passcode }: { id: string; passcode: string }) =>
-      projectsApi.join(id, passcode),
+    mutationFn: (id: string) => projectsApi.join(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   })
 }

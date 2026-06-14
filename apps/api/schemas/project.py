@@ -25,8 +25,6 @@ class ProjectOut(BaseModel):
     created_at: datetime
     member_count: int
     milestone_count: int
-    passcode: Optional[str] = None
-
     model_config = {"from_attributes": True}
 
 
@@ -56,10 +54,6 @@ class ProjectMemberOut(BaseModel):
     joined_at: datetime
 
     model_config = {"from_attributes": True}
-
-
-class JoinProjectRequest(BaseModel):
-    passcode: str
 
 
 class UpdateMemberRoleRequest(BaseModel):

@@ -37,6 +37,7 @@ class MilestoneOut(BaseModel):
     created_at: datetime
     children: list["MilestoneOut"] = []
     days_until_due: Optional[int]
+    user_access: str = 'view'
 
     model_config = ConfigDict(from_attributes=True)
 

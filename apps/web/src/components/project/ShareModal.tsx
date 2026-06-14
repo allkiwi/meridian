@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { shareProject, shareMilestone } from '@/api/share'
 import type { ShareErrorDetail } from '@/api/share'
+type AccessType = 'view' | 'edit'
 
 interface Props {
   open: boolean
@@ -17,6 +18,7 @@ interface Props {
 export function ShareModal({ open, onClose, entityType, entityId, entityName }: Props) {
   const [recipientEmail, setRecipientEmail] = useState('')
   const [message, setMessage] = useState('')
+  const [accessType, setAccessType] = useState<AccessType>('view')
   const [loading, setLoading] = useState(false)
   const [errorCode, setErrorCode] = useState<ShareErrorDetail['error_code'] | 'unknown' | null>(null)
   const [sent, setSent] = useState(false)
@@ -24,6 +26,7 @@ export function ShareModal({ open, onClose, entityType, entityId, entityName }: 
   function handleClose() {
     setRecipientEmail('')
     setMessage('')
+    setAccessType('view')
     setErrorCode(null)
     setSent(false)
     onClose()
@@ -34,11 +37,14 @@ export function ShareModal({ open, onClose, entityType, entityId, entityName }: 
     setLoading(true)
     setErrorCode(null)
     try {
-      const data = { recipient_email: recipientEmail, message: message || undefined }
       if (entityType === 'project') {
-        await shareProject(entityId, data)
+        await shareProject(entityId, { recipient_email: recipientEmail, access_type: accessType, message: message || undefined })
       } else {
-        await shareMilestone(entityId, data)
+        await shareMilestone(entityId, {
+          recipient_email: recipientEmail,
+          access_type: accessType,
+          message: message || undefined,
+        })
       }
       setSent(true)
     } catch (err) {
@@ -64,7 +70,9 @@ export function ShareModal({ open, onClose, entityType, entityId, entityName }: 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-sm text-white/70">Email sent to <span className="text-white">{recipientEmail}</span></p>
+          <p className="text-sm text-white/70">
+            {accessType === 'edit' ? 'Edit' : 'View'} access sent to <span className="text-white">{recipientEmail}</span>
+          </p>
           <Button variant="ghost" onClick={handleClose}>Close</Button>
         </div>
       ) : errorCode === 'google_not_connected' ? (
@@ -108,6 +116,46 @@ export function ShareModal({ open, onClose, entityType, entityId, entityName }: 
             onChange={(e) => setRecipientEmail(e.target.value)}
             placeholder="colleague@example.com"
           />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-white/70">Access level</label>
+            <div className="flex gap-3">
+              {(['view', 'edit'] as const).map((level) => (
+                <label
+                  key={level}
+                  className={`flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg border px-4 py-2.5 transition-colors ${
+                    accessType === level
+                      ? 'border-amber-500 bg-amber-500/10'
+                      : 'border-white/10 bg-white/3 hover:border-white/20'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="access_type"
+                    value={level}
+                    checked={accessType === level}
+                    onChange={() => setAccessType(level)}
+                    className="sr-only"
+                  />
+                  <span
+                    className={`h-3.5 w-3.5 rounded-full border-2 ${
+                      accessType === level ? 'border-amber-500 bg-amber-500' : 'border-white/30'
+                    }`}
+                  />
+                  <div>
+                    <p className={`text-sm font-medium ${accessType === level ? 'text-amber-300' : 'text-white/70'}`}>
+                      {level === 'view' ? 'View' : 'Edit'}
+                    </p>
+                    <p className="text-xs text-white/30">
+                      {level === 'view'
+                        ? entityType === 'project' ? 'Can view milestones only' : 'Can view this milestone'
+                        : entityType === 'project' ? 'Can create and edit milestones' : 'Can edit this milestone'}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-white/70">

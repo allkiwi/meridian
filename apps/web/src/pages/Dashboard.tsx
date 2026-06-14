@@ -6,58 +6,15 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { useUserProjects, useCreateProject } from '@/hooks/useProject'
 
-function PasscodeModal({ passcode, onClose }: { passcode: string; onClose: () => void }) {
-  const [copied, setCopied] = useState(false)
-
-  function copy() {
-    navigator.clipboard.writeText(passcode)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <Modal open onClose={onClose} title="Project created">
-      <p className="mb-4 text-sm text-white/60">
-        Share this passcode with your team members. They will need it to join the project.
-      </p>
-
-      <div className="mb-4 flex items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 py-5">
-        <span className="font-mono text-3xl font-bold tracking-[0.3em] text-amber-400">
-          {passcode}
-        </span>
-      </div>
-
-      <p className="mb-5 text-center text-xs text-white/40">
-        This passcode will not be shown again.
-      </p>
-
-      <div className="flex gap-3">
-        <Button variant="ghost" className="flex-1" onClick={copy}>
-          {copied ? 'Copied!' : 'Copy passcode'}
-        </Button>
-        <Button className="flex-1" onClick={onClose}>
-          Got it
-        </Button>
-      </div>
-    </Modal>
-  )
-}
-
 function NewProjectModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [passcode, setPasscode] = useState<string | null>(null)
   const { mutateAsync: createProject } = useCreateProject()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const project = await createProject({ name, description: description || undefined })
-    if (project.passcode) setPasscode(project.passcode)
-    else onClose()
-  }
-
-  if (passcode) {
-    return <PasscodeModal passcode={passcode} onClose={onClose} />
+    await createProject({ name, description: description || undefined })
+    onClose()
   }
 
   return (

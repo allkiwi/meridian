@@ -7,7 +7,6 @@ from database import get_db
 from middleware.role_guard import require_project_role
 from schemas.auth import UserOut
 from schemas.project import (
-    JoinProjectRequest,
     ProjectCreate,
     ProjectMemberOut,
     ProjectOut,
@@ -16,7 +15,7 @@ from schemas.project import (
     ProjectUpdate,
     UpdateMemberRoleRequest,
 )
-from schemas.share import ShareRequest, ShareResponse
+from schemas.share import ProjectShareRequest, ShareResponse
 from services import auth_service, email_service, project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -78,11 +77,10 @@ async def delete_project(
 @router.post("/{project_id}/join", response_model=ProjectOut)
 async def join_project(
     project_id: uuid.UUID,
-    data: JoinProjectRequest,
     current_user: UserOut = Depends(auth_service.get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await project_service.join_project(current_user, project_id, data, db)
+    return await project_service.join_project(current_user, project_id, db)
 
 
 @router.get("/{project_id}/members", response_model=list[ProjectMemberOut])
@@ -97,11 +95,11 @@ async def get_members(
 @router.post("/{project_id}/share", response_model=ShareResponse)
 async def share_project(
     project_id: uuid.UUID,
-    data: ShareRequest,
+    data: ProjectShareRequest,
     current_user: UserOut = Depends(auth_service.get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await email_service.share_project(project_id, current_user.id, data.recipient_email, data.message, db)
+    await email_service.share_project(project_id, current_user.id, data.recipient_email, data.access_type, data.message, db)
     return ShareResponse()
 
 

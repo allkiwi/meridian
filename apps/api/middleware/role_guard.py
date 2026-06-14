@@ -10,7 +10,7 @@ from schemas.auth import UserOut
 from services.auth_service import get_current_user
 
 ROLE_LEVELS: dict[str, int] = {
-    "executive": 1,
+    "viewer": 1,
     "member": 2,
     "project_manager": 3,
 }

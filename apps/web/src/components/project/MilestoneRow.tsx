@@ -43,6 +43,7 @@ export function MilestoneRow({
 }: Props) {
   const [hovered, setHovered] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const isEditable = canEdit || milestone.user_access === 'edit'
 
   function handleDelete() {
     if (!confirming) { setConfirming(true); return }
@@ -132,7 +133,7 @@ export function MilestoneRow({
           {/* Action buttons — visible on hover */}
           {hovered && (
             <div className="flex shrink-0 items-center gap-1">
-              {canEdit && (
+              {isEditable && (
                 <>
                   <button
                     onClick={() => onAddChild(milestone.id)}
